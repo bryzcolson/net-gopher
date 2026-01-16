@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"testing"
 	"time"
 )
@@ -283,6 +284,151 @@ func TestServer_Serve(t *testing.T) {
 	}
 	if !bytes.Contains(buf[:n], []byte("hello")) {
 		t.Errorf("response missing 'hello': %q", buf[:n])
+	}
+}
+
+func TestServeMux_Handle(t *testing.T) {
+	tests := []struct {
+		name     string
+		pattern  string
+		selector string
+		wantCall bool
+	}{
+		{"exact match", "/test", "/test", true},
+		{"no match", "/test", "/other", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mux := NewServeMux()
+			called := false
+			mux.Handle(tt.pattern, HandlerFunc(func(w ResponseWriter, r *Request) {
+				called = true
+			}))
+
+			w, _ := newTestResponseWriter()
+			mux.ServeGopher(w, &Request{Selector: tt.selector})
+
+			if called != tt.wantCall {
+				t.Errorf("Handle() called = %v, wanted %v", called, tt.wantCall)
+			}
+		})
+	}
+}
+
+func TestServeMux_HandleFunc(t *testing.T) {
+	tests := []struct {
+		name     string
+		pattern  string
+		selector string
+		wantCall bool
+	}{
+		{"exact match", "/test", "/test", true},
+		{"no match", "/test", "/other", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mux := NewServeMux()
+			called := false
+			mux.HandleFunc(tt.pattern, func(w ResponseWriter, r *Request) {
+				called = true
+			})
+
+			w, _ := newTestResponseWriter()
+			mux.ServeGopher(w, &Request{Selector: tt.selector})
+
+			if called != tt.wantCall {
+				t.Errorf("HandleFunc() called = %v, wanted %v", called, tt.wantCall)
+			}
+		})
+	}
+}
+
+func TestServeMux_Match(t *testing.T) {
+	tests := []struct {
+		name     string
+		patterns []string
+		selector string
+		want     string
+	}{
+		{"exact match", []string{"/", "/about"}, "/about", "/about"},
+		{"prefix match", []string{"/", "/files"}, "/files/doc.txt", "/files"},
+		{"longest prefix", []string{"/", "/a", "/a/b"}, "/a/b/c", "/a/b"},
+		{"root fallback", []string{"/"}, "/unknown", "/"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mux := NewServeMux()
+			var matched string
+			for _, p := range tt.patterns {
+				pattern := p
+				mux.HandleFunc(pattern, func(w ResponseWriter, r *Request) {
+					matched = pattern
+				})
+			}
+
+			w, _ := newTestResponseWriter()
+			mux.ServeGopher(w, &Request{Selector: tt.selector})
+
+			if matched != tt.want {
+				t.Errorf("match() matched = %q, wanted %q", matched, tt.want)
+			}
+		})
+	}
+}
+
+func TestServeMux_NotFound(t *testing.T) {
+	tests := []struct {
+		name       string
+		selector   string
+		wantString string
+	}{
+		{"missing selector", "/missing", "selector not found"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mux := NewServeMux()
+			w, buf := newTestResponseWriter()
+			mux.ServeGopher(w, &Request{Selector: tt.selector})
+
+			if got := buf.String(); !strings.Contains(got, tt.wantString) {
+				t.Errorf("ServeGopher() output = %q, wanted %q", got, tt.wantString)
+			}
+		})
+	}
+}
+
+func TestDefaultServeMux_HandleFunc(t *testing.T) {
+	tests := []struct {
+		name     string
+		pattern  string
+		selector string
+		wantCall bool
+	}{
+		{"registers handler", "/test", "/test", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			original := DefaultServeMux
+			DefaultServeMux = NewServeMux()
+			defer func() { DefaultServeMux = original }()
+
+			called := false
+			HandleFunc(tt.pattern, func(w ResponseWriter, r *Request) {
+				called = true
+			})
+
+			w, _ := newTestResponseWriter()
+			DefaultServeMux.ServeGopher(w, &Request{Selector: tt.selector})
+
+			if called != tt.wantCall {
+				t.Errorf("HandleFunc() called = %v, wanted %v", called, tt.wantCall)
+			}
+		})
 	}
 }
 

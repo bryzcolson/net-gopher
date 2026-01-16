@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"strings"
+	"sync"
 )
 
 // Handler responds to a Gopher request.
@@ -33,6 +34,9 @@ type ResponseWriter interface {
 
 	// WriteInfo is a convenience method for writing an info item.
 	WriteInfo(text string) error
+
+	// WriteError is a convenience method for writing an error item.
+	WriteError(text string) error
 
 	// WriteDirectory is a convenience method for writing
 	// multiple items to a menu/gophermap.
@@ -72,6 +76,17 @@ func (w *responseWriter) WriteInfo(text string) error {
 	return w.WriteItem(item)
 }
 
+func (w *responseWriter) WriteError(text string) error {
+	item := &Item{
+		Type:     TypeError,
+		Display:  text,
+		Selector: "",
+		Host:     "error.host",
+		Port:     "70",
+	}
+	return w.WriteItem(item)
+}
+
 func (w *responseWriter) WriteDirectory(items []*Item) error {
 	for _, item := range items {
 		if err := w.WriteItem(item); err != nil {
@@ -81,6 +96,67 @@ func (w *responseWriter) WriteDirectory(items []*Item) error {
 
 	_, err := w.Write([]byte(".\r\n"))
 	return err
+}
+
+type ServeMux struct {
+	mu sync.RWMutex
+	m  map[string]Handler
+}
+
+func NewServeMux() *ServeMux {
+	return &ServeMux{m: make(map[string]Handler)}
+}
+
+func (mux *ServeMux) HandleFunc(pattern string, handler func(ResponseWriter, *Request)) {
+	mux.Handle(pattern, HandlerFunc(handler))
+}
+
+func (mux *ServeMux) Handle(pattern string, handler Handler) {
+	mux.mu.Lock()
+	defer mux.mu.Unlock()
+	mux.m[pattern] = handler
+}
+
+func (mux *ServeMux) match(selector string) Handler {
+	mux.mu.RLock()
+	defer mux.mu.RUnlock()
+
+	if h, ok := mux.m[selector]; ok {
+		return h
+	}
+	var longest string
+	var handler Handler
+	for pattern, h := range mux.m {
+		if strings.HasPrefix(selector, pattern) && len(pattern) > len(longest) {
+			longest = pattern
+			handler = h
+		}
+	}
+	return handler
+}
+
+// ServeGopher dispatches the request to the handler whose
+// pattern most closely matches the request selector.
+func (mux *ServeMux) ServeGopher(w ResponseWriter, r *Request) {
+	h := mux.match(r.Selector)
+	if h == nil {
+		w.WriteError("selector not found")
+		return
+	}
+	h.ServeGopher(w, r)
+}
+
+// DefaultServeMux is the default [ServeMux] used by [Serve].
+var DefaultServeMux = NewServeMux()
+
+// Handle registers the handler for the given pattern in [DefaultServeMux].
+func Handle(pattern string, handler Handler) {
+	DefaultServeMux.Handle(pattern, handler)
+}
+
+// HandleFunc registers the handler function for the given pattern in [DefaultServeMux].
+func HandleFunc(pattern string, handler func(ResponseWriter, *Request)) {
+	DefaultServeMux.HandleFunc(pattern, handler)
 }
 
 // Server defines parameters for running a Gopher server.
@@ -118,6 +194,9 @@ func (srv *Server) serveConn(conn net.Conn) {
 	w := &responseWriter{conn: conn, host: host, port: port}
 
 	handler := srv.Handler
+	if handler == nil {
+		handler = DefaultServeMux
+	}
 	handler.ServeGopher(w, req)
 
 	fmt.Fprintf(conn, ".\r\n")
