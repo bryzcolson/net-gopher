@@ -15,7 +15,7 @@ resp, err := gopher.Get("gopher://example.com/")
 if err != nil {
     // handle error
 }
-defer resp.Close()
+defer resp.Body.Close()
 body, err := io.ReadAll(resp.Body)
 // ...
 ```
@@ -40,7 +40,7 @@ The handler is usually `nil`, which means to use `DefaultServeMux`.
 `Handle` and `HandleFunc` add handlers to `DefaultServeMux`:
 
 ```go
-gopher.Handle("/", func(w gopher.ResponseWriter, r *gopher.Request) {
+gopher.HandleFunc("/", func(w gopher.ResponseWriter, r *gopher.Request) {
     w.WriteInfo("Welcome to the Gopher server!")
     w.WriteItem(&gopher.Item{Type: gopher.TypeDirectory, Display: "About", Selector: "/about"})
     w.WriteItem(&gopher.Item{Type: gopher.TypeText, Display: "README", Selector: "/readme"})

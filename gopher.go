@@ -47,7 +47,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/url"
 )
 
@@ -187,7 +186,4 @@ type Response struct {
 
 	// Request is the request that was sent to obtain this response.
 	Request *Request
-
-	// conn is the underlying network connection
-	conn net.Conn
 }
