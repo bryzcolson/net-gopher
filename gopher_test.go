@@ -241,3 +241,123 @@ func TestResponseWriter_WriteDirectory(t *testing.T) {
 		})
 	}
 }
+
+func TestNewRequest(t *testing.T) {
+	tests := []struct {
+		name         string
+		rawURL       string
+		wantType     byte
+		wantSelector string
+		wantQuery    string
+		wantHost     string
+		wantErr      error
+	}{
+		{
+			name:         "directory with selector",
+			rawURL:       "gopher://example.com/1/foo/bar",
+			wantType:     TypeDirectory,
+			wantSelector: "/foo/bar",
+			wantHost:     "example.com",
+		},
+		{
+			name:         "text file",
+			rawURL:       "gopher://example.com/0/docs/readme.txt",
+			wantType:     TypeText,
+			wantSelector: "/docs/readme.txt",
+			wantHost:     "example.com",
+		},
+		{
+			name:         "type only no selector",
+			rawURL:       "gopher://example.com/1",
+			wantType:     TypeDirectory,
+			wantSelector: "",
+			wantHost:     "example.com",
+		},
+		{
+			name:         "empty path defaults to directory",
+			rawURL:       "gopher://example.com",
+			wantType:     TypeDirectory,
+			wantSelector: "",
+			wantHost:     "example.com",
+		},
+		{
+			name:         "root path defaults to directory",
+			rawURL:       "gopher://example.com/",
+			wantType:     TypeDirectory,
+			wantSelector: "",
+			wantHost:     "example.com",
+		},
+		{
+			name:         "search with query",
+			rawURL:       "gopher://example.com/7/search?hello+world",
+			wantType:     TypeSearch,
+			wantSelector: "/search",
+			wantQuery:    "hello+world",
+			wantHost:     "example.com",
+		},
+		{
+			name:         "custom port",
+			rawURL:       "gopher://example.com:7070/1/files",
+			wantType:     TypeDirectory,
+			wantSelector: "/files",
+			wantHost:     "example.com:7070",
+		},
+		{
+			name:         "binary file",
+			rawURL:       "gopher://example.com/9/archive.tar.gz",
+			wantType:     TypeBinary,
+			wantSelector: "/archive.tar.gz",
+			wantHost:     "example.com",
+		},
+		{
+			name:         "image file",
+			rawURL:       "gopher://example.com/I/photo.jpg",
+			wantType:     TypeImage,
+			wantSelector: "/photo.jpg",
+			wantHost:     "example.com",
+		},
+		{
+			name:    "invalid scheme",
+			rawURL:  "http://example.com/foo",
+			wantErr: ErrInvalidScheme,
+		},
+		{
+			name:    "invalid URL",
+			rawURL:  "://bad-url",
+			wantErr: ErrInvalidURL,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req, err := NewRequest(tt.rawURL)
+			if tt.wantErr != nil {
+				if !errors.Is(err, tt.wantErr) {
+					t.Fatalf("NewRequest() error = %v, wanted %v", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("NewRequest() unexpected error: %v", err)
+			}
+			if req.Type != tt.wantType {
+				t.Errorf("NewRequest() type = %q, wanted %q", req.Type, tt.wantType)
+			}
+			if req.Selector != tt.wantSelector {
+				t.Errorf("NewRequest() selector = %q, wanted %q", req.Selector, tt.wantSelector)
+			}
+			if req.Query != tt.wantQuery {
+				t.Errorf("NewRequest() query = %q, wanted %q", req.Query, tt.wantQuery)
+			}
+			if req.Host != tt.wantHost {
+				t.Errorf("NewRequest() host = %q, wanted %q", req.Host, tt.wantHost)
+			}
+			if req.URL == nil {
+				t.Error("NewRequest() URL is nil")
+			}
+			if req.ctx == nil {
+				t.Error("NewRequest() ctx is nil")
+			}
+		})
+	}
+}

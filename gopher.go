@@ -2,6 +2,7 @@ package gopher
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -30,6 +31,9 @@ const (
 // Request represents a Gopher request
 // received by a server or to be sent by a client.
 type Request struct {
+	// Type is the Gopher item type (0, 1, 7, etc.)
+	Type byte
+
 	// Selector is the path/resource being requested.
 	Selector string
 
@@ -89,6 +93,9 @@ type Item struct {
 var (
 	DefaultHost = "error.host"
 	DefaultPort = "70"
+
+	ErrInvalidScheme = errors.New("invalid scheme")
+	ErrInvalidURL    = errors.New("invalid URL")
 )
 
 func (i *Item) String() string {
@@ -164,4 +171,37 @@ func (w *responseWriter) WriteDirectory(items []*Item) error {
 
 	_, err := w.Write([]byte(".\r\n"))
 	return err
+}
+
+func NewRequest(rawURL string) (*Request, error) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrInvalidURL, err)
+	}
+
+	if u.Scheme != "gopher" {
+		return nil, ErrInvalidScheme
+	}
+
+	path := u.Path
+	var itemType byte = TypeDirectory
+	var selector string
+
+	if len(path) >= 2 && path[0] == '/' {
+		itemType = path[1]
+		selector = path[2:]
+	} else if path == "/" || path == "" {
+		selector = ""
+	} else {
+		selector = path
+	}
+
+	return &Request{
+		Type:     itemType,
+		Selector: selector,
+		Query:    u.RawQuery,
+		Host:     u.Host,
+		URL:      u,
+		ctx:      context.Background(),
+	}, nil
 }
