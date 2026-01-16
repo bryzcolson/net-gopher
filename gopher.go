@@ -72,41 +72,6 @@ const (
 	TypeInfo                   = 'i'
 )
 
-// Request represents a Gopher request
-// received by a server or to be sent by a client.
-type Request struct {
-	// Type is the Gopher item type (0, 1, 7, etc.)
-	Type ItemType
-
-	// Selector is the path/resource being requested.
-	Selector string
-
-	// Query contains search terms for search servers (Type 7).
-	Query string
-
-	// Host specifies the host on which the URL is sought.
-	Host string
-
-	// URL specifies either the URI being requested (for server
-	// requests) or the URL to access (for client requests).
-	URL *url.URL
-
-	// ctx is the request context for cancellation
-	ctx context.Context
-}
-
-// Response represents a Gopher response.
-type Response struct {
-	// Body represents the response body.
-	Body io.ReadCloser
-
-	// Request is the request that was sent to obtain this response.
-	Request *Request
-
-	// conn is the underlying network connection
-	conn net.Conn
-}
-
 // Item represents a singe line in a Gopher menu/directory.
 type Item struct {
 	// Type is the Gopher item type (0, 1, i, etc.)
@@ -148,7 +113,34 @@ var (
 	ErrInvalidURL    = errors.New("invalid URL")
 )
 
+// Request represents a Gopher request
+// received by a server or to be sent by a client.
+type Request struct {
+	// Type is the Gopher item type (0, 1, 7, etc.)
+	Type ItemType
+
+	// Selector is the path/resource being requested.
+	Selector string
+
+	// Query contains search terms for search servers (Type 7).
+	Query string
+
+	// Host specifies the host on which the URL is sought.
+	Host string
+
+	// URL specifies either the URI being requested (for server
+	// requests) or the URL to access (for client requests).
+	URL *url.URL
+
+	// ctx is the request context for cancellation
+	ctx context.Context
+}
+
 func NewRequest(rawURL string) (*Request, error) {
+	return NewRequestWithContext(context.Background(), rawURL)
+}
+
+func NewRequestWithContext(ctx context.Context, rawURL string) (*Request, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrInvalidURL, err)
@@ -177,6 +169,25 @@ func NewRequest(rawURL string) (*Request, error) {
 		Query:    u.RawQuery,
 		Host:     u.Host,
 		URL:      u,
-		ctx:      context.Background(),
+		ctx:      ctx,
 	}, nil
+}
+
+func (r *Request) Context() context.Context {
+	if r.ctx == nil {
+		return context.Background()
+	}
+	return r.ctx
+}
+
+// Response represents a Gopher response.
+type Response struct {
+	// Body represents the response body.
+	Body io.ReadCloser
+
+	// Request is the request that was sent to obtain this response.
+	Request *Request
+
+	// conn is the underlying network connection
+	conn net.Conn
 }
