@@ -51,7 +51,7 @@ gopher.HandleFunc("/about", func(w gopher.ResponseWriter, r *gopher.Request) {
 	w.WriteInfo("Built with net-gopher")
 })
 
-gopher.HandleFun("/readme", func(w gopher.ResponseWriter, r *gopher.Request) {
+gopher.HandleFunc("/readme", func(w gopher.ResponseWriter, r *gopher.Request) {
     fmt.Fprintln(w, "net-gopher: A Gopher protocol library for Go")
 })
 

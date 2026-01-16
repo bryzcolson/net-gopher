@@ -26,8 +26,8 @@
 //
 //	gopher.HandleFunc("/", func(w gopher.ResponseWriter, r *gopher.Request) {
 //	    w.WriteInfo("Welcome to the Gopher server!")
-//	    w.WriteInfo(&gopher.Item{Type: gopher.TypeDirectory, Display: "About", Selector: "/about"})
-//	    w.WriteInfo(&gopher.Item{Type: gopher.TypeText, Display: "README", Selector: "/readme"})
+//	    w.WriteItem(&gopher.Item{Type: gopher.TypeDirectory, Display: "About", Selector: "/about"})
+//	    w.WriteItem(&gopher.Item{Type: gopher.TypeText, Display: "README", Selector: "/readme"})
 //	})
 //
 //	gopher.HandleFunc("/about", func(w gopher.ResponseWriter, r *gopher.Request) {
@@ -35,7 +35,7 @@
 //	    w.WriteInfo("Built with net-gopher")
 //	})
 //
-//	gopher.HandleFun("/readme", func(w gopher.ResponseWriter, r *gopher.Request) {
+//	gopher.HandleFunc("/readme", func(w gopher.ResponseWriter, r *gopher.Request) {
 //	    fmt.Fprintln(w, "net-gopher: A Gopher protocol library for Go")
 //	})
 //
@@ -72,12 +72,12 @@ const (
 	TypeInfo                   = 'i'
 )
 
-// Item represents a singe line in a Gopher menu/directory.
+// Item represents a single line in a Gopher menu/directory.
 type Item struct {
 	// Type is the Gopher item type (0, 1, i, etc.)
 	Type ItemType
 
-	// Dislpay is the user-visible text.
+	// Display is the user-visible text.
 	Display string
 
 	// Selector is the path to the resource
