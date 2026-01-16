@@ -3,37 +3,44 @@ package gopher
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"net"
 	"testing"
 	"time"
 )
 
 type mockConn struct {
-	*bytes.Buffer
+	readBuf  *bytes.Buffer
+	writeBuf *bytes.Buffer
 }
 
-func (m mockConn) Read(b []byte) (n int, err error)   { return 0, nil }
-func (m mockConn) Close() error                       { return nil }
-func (m mockConn) LocalAddr() net.Addr                { return nil }
-func (m mockConn) RemoteAddr() net.Addr               { return nil }
-func (m mockConn) SetDeadline(t time.Time) error      { return nil }
-func (m mockConn) SetReadDeadline(t time.Time) error  { return nil }
-func (m mockConn) SetWriteDeadline(t time.Time) error { return nil }
+func (m *mockConn) Read(b []byte) (int, error)         { return m.readBuf.Read(b) }
+func (m *mockConn) Write(b []byte) (int, error)        { return m.writeBuf.Write(b) }
+func (m *mockConn) Close() error                       { return nil }
+func (m *mockConn) LocalAddr() net.Addr                { return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 70} }
+func (m *mockConn) RemoteAddr() net.Addr               { return nil }
+func (m *mockConn) SetDeadline(t time.Time) error      { return nil }
+func (m *mockConn) SetReadDeadline(t time.Time) error  { return nil }
+func (m *mockConn) SetWriteDeadline(t time.Time) error { return nil }
+
+func newMockConn(input string) (*mockConn, *bytes.Buffer) {
+	writeBuf := &bytes.Buffer{}
+	return &mockConn{readBuf: bytes.NewBufferString(input), writeBuf: writeBuf}, writeBuf
+}
 
 type TestConfig struct {
 	defaultHost string
 	defaultPort string
 }
 
-// Helper to create a test ResponseWriter
 func newTestResponseWriterWithConfig(config *TestConfig) (*responseWriter, *bytes.Buffer) {
-	buf := &bytes.Buffer{}
+	conn, writeBuf := newMockConn("")
 	w := &responseWriter{
-		conn: mockConn{buf},
+		conn: conn,
 		host: config.defaultHost,
 		port: config.defaultPort,
 	}
-	return w, buf
+	return w, writeBuf
 }
 
 func newTestResponseWriter() (*responseWriter, *bytes.Buffer) {
@@ -191,6 +198,91 @@ func TestResponseWriter_WriteDirectory(t *testing.T) {
 				t.Errorf("WriteDirectory() output mismatch")
 			}
 		})
+	}
+}
+
+func TestHandlerFunc(t *testing.T) {
+	called := false
+	f := HandlerFunc(func(w ResponseWriter, r *Request) {
+		called = true
+	})
+
+	f.ServeGopher(nil, nil)
+	if !called {
+		t.Error("HandlerFunc did not call underlying function")
+	}
+}
+
+func TestServer_serveConn(t *testing.T) {
+	tests := []struct {
+		name         string
+		input        string
+		wantSelector string
+		wantQuery    string
+	}{
+		{"simple selector", "/hello\r\n", "/hello", ""},
+		{"empty selector", "\r\n", "/", ""},
+		{"selector with query", "/search\tgopher\r\n", "/search", "gopher"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var gotReq *Request
+			srv := &Server{
+				Handler: HandlerFunc(func(w ResponseWriter, r *Request) {
+					gotReq = r
+				}),
+			}
+
+			conn, _ := newMockConn(tt.input)
+			srv.serveConn(conn)
+
+			if gotReq == nil {
+				t.Fatal("handler not called")
+			}
+			if gotReq.Selector != tt.wantSelector {
+				t.Errorf("selector = %q, want %q", gotReq.Selector, tt.wantSelector)
+			}
+			if gotReq.Query != tt.wantQuery {
+				t.Errorf("query = %q, want %q", gotReq.Query, tt.wantQuery)
+			}
+		})
+	}
+}
+
+func TestServer_Serve(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+
+	var gotSelector string
+	srv := &Server{
+		Handler: HandlerFunc(func(w ResponseWriter, r *Request) {
+			gotSelector = r.Selector
+			w.WriteInfo("hello")
+		}),
+	}
+
+	go srv.Serve(ln)
+
+	conn, err := net.Dial("tcp", ln.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+
+	fmt.Fprintf(conn, "/test\r\n")
+
+	buf := make([]byte, 256)
+	n, _ := conn.Read(buf)
+
+	if gotSelector != "/test" {
+		t.Errorf("selector = %q, want /test", gotSelector)
+	}
+	if !bytes.Contains(buf[:n], []byte("hello")) {
+		t.Errorf("response missing 'hello': %q", buf[:n])
 	}
 }
 
