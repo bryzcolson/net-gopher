@@ -86,10 +86,9 @@ func (c *Client) transport() RoundTripper {
 // If the returned error is nil, the [Response] will contain a non-nil
 // Body which the user is expected to close.
 func (c *Client) Do(req *Request) (*Response, error) {
-	ctx := req.Context()
 	if c.Timeout > 0 {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, c.Timeout)
+		req.ctx, cancel = context.WithTimeout(req.Context(), c.Timeout)
 		defer cancel()
 	}
 	return c.transport().RoundTrip(req)
