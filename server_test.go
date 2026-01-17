@@ -162,6 +162,30 @@ func TestResponseWriter_WriteText(t *testing.T) {
 			wantString: ".\r\n",
 			wantErr:    nil,
 		},
+		{
+			name:       "period-stuffing mid-line",
+			input:      "Hello\r\n.world\r\n",
+			wantString: "Hello\r\n..world\r\n.\r\n",
+			wantErr:    nil,
+		},
+		{
+			name:       "period-stuffing at start",
+			input:      ".starts with period",
+			wantString: "..starts with period.\r\n",
+			wantErr:    nil,
+		},
+		{
+			name:       "period-stuffing multiple lines",
+			input:      ".first\r\n.second\r\n.third",
+			wantString: "..first\r\n..second\r\n..third.\r\n",
+			wantErr:    nil,
+		},
+		{
+			name:       "period alone on line",
+			input:      "before\r\n.\r\nafter",
+			wantString: "before\r\n..\r\nafter.\r\n",
+			wantErr:    nil,
+		},
 	}
 
 	for _, tt := range tests {

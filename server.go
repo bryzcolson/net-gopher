@@ -62,6 +62,10 @@ func (w *responseWriter) Write(p []byte) (int, error) {
 }
 
 func (w *responseWriter) WriteText(text string) error {
+	text = strings.ReplaceAll(text, "\r\n.", "\r\n..")
+	if len(text) > 0 && text[0] == '.' {
+		text = "." + text
+	}
 	_, err := w.Write([]byte(text))
 	if err != nil {
 		return err
