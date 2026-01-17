@@ -3,7 +3,6 @@ package gopher
 import (
 	"bufio"
 	"context"
-	"fmt"
 	"io"
 	"net"
 	"strings"
@@ -27,7 +26,16 @@ func (f HandlerFunc) ServeGopher(w ResponseWriter, r *Request) {
 // ResponseWriter writes responses to a Gopher request.
 type ResponseWriter interface {
 	// Write writes raw bytes to the connection.
+	// The response will be terminated with ".\r\n" per RFC 1436.
 	Write([]byte) (int, error)
+
+	// WriteText writes text with termination.
+	// Use this for text content per RFC 1436.
+	WriteText(string) error
+
+	// WriteBinary writes raw bytes without termination.
+	// Use this for binary content (types 5, 9, g, I) per RFC 1436.
+	WriteBinary([]byte) error
 
 	// WriteItem writes a single menu item.
 	WriteItem(item *Item) error
@@ -51,6 +59,20 @@ type responseWriter struct {
 
 func (w *responseWriter) Write(p []byte) (int, error) {
 	return w.conn.Write(p)
+}
+
+func (w *responseWriter) WriteText(text string) error {
+	_, err := w.Write([]byte(text))
+	if err != nil {
+		return err
+	}
+	_, err = w.Write([]byte(".\r\n"))
+	return err
+}
+
+func (w *responseWriter) WriteBinary(p []byte) error {
+	_, err := w.conn.Write(p)
+	return err
 }
 
 func (w *responseWriter) WriteItem(item *Item) error {
@@ -198,8 +220,6 @@ func (srv *Server) serveConn(conn net.Conn) {
 		handler = DefaultServeMux
 	}
 	handler.ServeGopher(w, req)
-
-	fmt.Fprintf(conn, ".\r\n")
 }
 
 // Serve accepts incoming connections on the Listener l, creating a

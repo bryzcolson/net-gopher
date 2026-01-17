@@ -137,6 +137,88 @@ func TestResponseWriter_WriteItem(t *testing.T) {
 	}
 }
 
+func TestResponseWriter_WriteText(t *testing.T) {
+	tests := []struct {
+		name       string
+		input      string
+		wantString string
+		wantErr    error
+	}{
+		{
+			name:       "simple text",
+			input:      "Hello, World!",
+			wantString: "Hello, World!.\r\n",
+			wantErr:    nil,
+		},
+		{
+			name:       "multiline text",
+			input:      "Line 1\r\nLine 2\r\nLine 3\r\n",
+			wantString: "Line 1\r\nLine 2\r\nLine 3\r\n.\r\n",
+			wantErr:    nil,
+		},
+		{
+			name:       "empty text",
+			input:      "",
+			wantString: ".\r\n",
+			wantErr:    nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w, buf := newTestResponseWriter()
+			err := w.WriteText(tt.input)
+			if !errors.Is(err, tt.wantErr) {
+				t.Errorf("WriteText() error = %v, wanted %v", err, tt.wantErr)
+			}
+			if got := buf.String(); got != tt.wantString {
+				t.Errorf("WriteText() output = %q, wanted %q", got, tt.wantString)
+			}
+		})
+	}
+}
+
+func TestResponseWriter_WriteBinary(t *testing.T) {
+	tests := []struct {
+		name       string
+		input      []byte
+		wantString string
+		wantErr    error
+	}{
+		{
+			name:       "binary data",
+			input:      []byte{0x00, 0x01, 0x02, 0xFF},
+			wantString: "\x00\x01\x02\xff",
+			wantErr:    nil,
+		},
+		{
+			name:       "binary with period pattern",
+			input:      []byte("data\r\n.\r\nmore"),
+			wantString: "data\r\n.\r\nmore",
+			wantErr:    nil,
+		},
+		{
+			name:       "empty binary",
+			input:      []byte{},
+			wantString: "",
+			wantErr:    nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w, buf := newTestResponseWriter()
+			err := w.WriteBinary(tt.input)
+			if !errors.Is(err, tt.wantErr) {
+				t.Errorf("WriteBinary() error = %v, wanted %v", err, tt.wantErr)
+			}
+			if got := buf.String(); got != tt.wantString {
+				t.Errorf("WriteBinary() output = %q, wanted %q", got, tt.wantString)
+			}
+		})
+	}
+}
+
 func TestResponseWriter_WriteInfo(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -174,7 +256,7 @@ func TestResponseWriter_WriteDirectory(t *testing.T) {
 		wantErr    error
 	}{
 		{
-			name: "happy path",
+			name: "multiple items with terminator",
 			items: []*Item{
 				{Type: TypeInfo, Display: "Hello"},
 				{Type: TypeText, Display: "About", Selector: "/about"},
@@ -183,6 +265,21 @@ func TestResponseWriter_WriteDirectory(t *testing.T) {
 			wantString: "iHello\t\tlocalhost\t70\r\n" +
 				"0About\t/about\tlocalhost\t70\r\n" +
 				"1Subdirectory\t/nested\tlocalhost\t70\r\n" +
+				".\r\n",
+			wantErr: nil,
+		},
+		{
+			name:       "empty directory still has terminator",
+			items:      []*Item{},
+			wantString: ".\r\n",
+			wantErr:    nil,
+		},
+		{
+			name: "single item with terminator",
+			items: []*Item{
+				{Type: TypeText, Display: "Only Item", Selector: "/only"},
+			},
+			wantString: "0Only Item\t/only\tlocalhost\t70\r\n" +
 				".\r\n",
 			wantErr: nil,
 		},
