@@ -1,11 +1,81 @@
 package gopher
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"time"
 )
+
+// textReader wraps a connection and handles period unstuffing
+// and terminator detection for text-based Gopher responses.
+type textReader struct {
+	conn      net.Conn
+	reader    *bufio.Reader
+	buf       bytes.Buffer
+	eof       bool
+	lastError error
+}
+
+func newTextReader(conn net.Conn) *textReader {
+	return &textReader{
+		conn:   conn,
+		reader: bufio.NewReader(conn),
+	}
+}
+
+func (tr *textReader) Read(p []byte) (n int, err error) {
+	if tr.buf.Len() > 0 {
+		return tr.buf.Read(p)
+	}
+
+	if tr.eof {
+		return 0, io.EOF
+	}
+
+	line, err := tr.reader.ReadBytes('\n')
+	if err != nil && err != io.EOF {
+		tr.lastError = err
+		return 0, err
+	}
+
+	if bytes.Equal(line, []byte(".\r\n")) || bytes.Equal(line, []byte(".\n")) {
+		tr.eof = true
+		return 0, io.EOF
+	}
+
+	if len(line) >= 2 && line[0] == '.' && line[1] == '.' {
+		line = line[1:]
+	}
+
+	tr.buf.Write(line)
+
+	if err == io.EOF && !tr.eof {
+		tr.eof = true
+	}
+
+	return tr.buf.Read(p)
+}
+
+func (tr *textReader) Close() error {
+	return tr.conn.Close()
+}
+
+// isTextType returns true if the item type should have period unstuffing
+// and terminator handling applied per RFC 1436.
+// Only types 0 (Text), 1 (Directory), and 7 (Search) use the period-terminated
+// format with period stuffing.
+func isTextType(t ItemType) bool {
+	switch t {
+	case TypeText, TypeDirectory, TypeSearch:
+		return true
+	default:
+		return false
+	}
+}
 
 // RoundTripper is an interface representing the ability to execute a
 // single Gopher transaction, obtaining the [Response] for a given [Request].
@@ -52,7 +122,14 @@ func (t *Transport) RoundTrip(req *Request) (*Response, error) {
 		return nil, err
 	}
 
-	return &Response{Request: req, Body: conn}, nil
+	// For text-based responses, wrap in a reader that handles
+	// period unstuffing and terminator detection.
+	var body io.ReadCloser = conn
+	if isTextType(req.Type) {
+		body = newTextReader(conn)
+	}
+
+	return &Response{Request: req, Body: body}, nil
 }
 
 // A Client is a Gopher client. Its zero value ([DefaultClient]) is a
