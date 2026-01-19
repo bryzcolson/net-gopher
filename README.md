@@ -1,5 +1,8 @@
 # net-gopher
 
+[![Go Reference](https://pkg.go.dev/badge/codeberg.org/bryzcolson/net-gopher.svg)](https://pkg.go.dev/codeberg.org/bryzcolson/net-gopher)
+![Coverage](https://img.shields.io/badge/coverage-83.5%25-green)
+
 Package `gopher` provides Gopher client and server implementations.
 
 `Get` makes Gopher requests:
